@@ -196,7 +196,7 @@ export default function AdminDashboard({
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 10000); // Fetch every 10s
+    const interval = setInterval(fetchNotifications, 60000); // Fetch every 60s
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
@@ -446,13 +446,6 @@ export default function AdminDashboard({
       handleFetch();
     }
     
-    // Auto refresh every 10 seconds
-    const interval = setInterval(() => {
-      if (activeTab === 'Management') {
-        fetchApplications();
-      }
-    }, 10000);
-    
     // Reset filters on tab change
     setBarangayFilter('All');
     setStatusFilter('All record');
@@ -460,8 +453,7 @@ export default function AdminDashboard({
     setDateRange({ from: '', to: '' });
     setCurrentPage(1);
     
-    return () => clearInterval(interval);
-  }, [activeTab, fetchApplications, setApplications]);
+  }, [activeTab, fetchApplications]);
 
   useEffect(() => {
     if (activeTab === 'Masterlist') {
@@ -540,7 +532,7 @@ export default function AdminDashboard({
     document.body.removeChild(link);
   };
 
-  const updateStatus = async (id: number, status: 'approved' | 'disapproved' | 'pending', remarks?: string, collectionType: 'applications' | 'masterlist' = 'applications') => {
+  const updateStatus = async (id: number, status: 'approved' | 'disapproved' | 'pending', remarks?: string) => {
     try {
       const token = localStorage.getItem("token");
       const headers: Record<string, string> = {
@@ -559,12 +551,14 @@ export default function AdminDashboard({
         body.rejection_remarks = remarks;
       }
 
-      const endpoint = collectionType === 'masterlist'
+      // Determine if it's a citizen_id or application_id
+      const isCitizenId = id > 1000000;
+      const endpoint = isCitizenId 
         ? `https://api-dbosca.phoenix.com.ph/api/masterlist/${id}`
         : `https://api-dbosca.phoenix.com.ph/api/applications/${id}`;
 
       const res = await fetch(endpoint, {
-        method: "PATCH",
+        method: "PUT",
         headers,
         body: JSON.stringify(body)
       });
@@ -579,13 +573,13 @@ export default function AdminDashboard({
       }
 
       if (res.ok) {
-        // No alert for seamless experience
+        alert("Status updated successfully");
         if (activeTab === 'Masterlist') {
           setMasterlistRefreshKey(prev => prev + 1);
         }
         await fetchApplications();
       } else {
-        alert(`Update failed: ${data?.message || 'Unknown error'}`);
+        alert(`Update failed: ${data.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error("Update error:", error);
@@ -729,7 +723,7 @@ export default function AdminDashboard({
         throw new Error(data.message || "Failed to update application");
       }
 
-      // No alert for seamless experience
+      alert("Changes saved successfully");
       setIsRegistrationModalOpen(false);
       setIsMasterlistModalOpen(false);
       setSelectedApp(null);
@@ -802,7 +796,7 @@ export default function AdminDashboard({
       }
 
       if (res.ok) {
-        // No alert for seamless experience
+        alert("Record deleted successfully");
         if (activeTab === 'Masterlist') {
           setMasterlistRefreshKey(prev => prev + 1);
         }
@@ -832,14 +826,26 @@ export default function AdminDashboard({
     setIsMoveToPendingModalOpen(false);
     
     try {
-      // Use the existing updateStatus function which is more robust and uses PATCH
-      await updateStatus(citizenId, 'pending', undefined, 'masterlist');
-      setPendingCitizenId(null);
-      // fetchApplications is already called inside updateStatus
-      console.log("Successfully moved to pending.");
+      const token = localStorage.getItem("token");
+      const response = await axios.post(`https://api-dbosca.phoenix.com.ph/api/masterlist/move-to-pending/${citizenId}`, {}, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        setPendingCitizenId(null);
+        setMasterlistRefreshKey(prev => prev + 1);
+        await fetchApplications();
+        alert("Successfully moved to pending.");
+      } else {
+        alert(response.data.message || "Failed to move to pending.");
+      }
     } catch (error: any) {
       console.error("Move to pending error:", error);
-      // updateStatus already alerts on error, but we can add a fallback here if needed
+      const errorMessage = error.response?.data?.message || "An error occurred while moving the record to pending.";
+      alert(errorMessage);
     } finally {
       setIsMovingToPending(false);
     }
@@ -1486,7 +1492,7 @@ export default function AdminDashboard({
                                         <div className="h-px bg-slate-50 my-1" />
                                         <button 
                                           onClick={() => {
-                                            updateStatus(app.id, 'pending', undefined, 'applications');
+                                            updateStatus(app.id, 'pending');
                                             setOpenDropdownId(null);
                                           }}
                                           className="w-full flex items-center gap-3 px-4 py-2 text-sm font-bold text-amber-600 hover:bg-gray-100 cursor-pointer transition-colors"

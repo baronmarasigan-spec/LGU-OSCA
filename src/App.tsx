@@ -114,11 +114,15 @@ export default function App() {
         headers
       });
       
-      if (!response.ok) {
-        throw new Error(`Fetch failed with status: ${response.status}`);
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error("Invalid JSON:", text);
+        return;
       }
 
-      const data = await response.json();
       console.log("API RESPONSE:", data);
       
       let apps = [];
@@ -155,19 +159,6 @@ export default function App() {
       }
     }
   }, []);
-
-  // Polling for real-time updates
-  React.useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    const token = localStorage.getItem("token");
-    
-    if (storedUser && token) {
-      const interval = setInterval(() => {
-        fetchApplications();
-      }, 10000); // Poll every 10 seconds
-      return () => clearInterval(interval);
-    }
-  }, [fetchApplications]);
 
   const handleLoginSuccess = (user: any) => {
     if (user.role === 1 || user.role === 2) {

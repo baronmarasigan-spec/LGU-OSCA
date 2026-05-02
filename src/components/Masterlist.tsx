@@ -48,13 +48,14 @@ export default function Masterlist({ onViewProfile, refreshTrigger, onMoveToPend
 
   const lastFetchRef = useRef<number>(0);
 
-  const isInitialFetch = useRef(true);
-
   const fetchMasterlist = useCallback(async () => {
-    const isInitial = isInitialFetch.current;
-    if (isInitial) {
-      setIsLoading(true);
-    }
+    // Throttle: don't fetch more than once every 30 seconds
+    const now = Date.now();
+    if (now - lastFetchRef.current < 30000) return;
+    lastFetchRef.current = now;
+
+    setIsLoading(true);
+    setMasterlistData([]); // Reset data on fetch start
     setError(null);
     try {
       const token = localStorage.getItem("token");
@@ -71,7 +72,7 @@ export default function Masterlist({ onViewProfile, refreshTrigger, onMoveToPend
       const response = await fetch(url, { headers });
       
       if (response.status === 429) {
-        if (isInitial) setError("Rate limit reached. Please wait a moment.");
+        setError("Rate limit reached. Please wait a moment.");
         return;
       }
 
@@ -89,27 +90,19 @@ export default function Masterlist({ onViewProfile, refreshTrigger, onMoveToPend
         data = result;
       }
       setMasterlistData(data);
-      isInitialFetch.current = false;
     } catch (err: any) {
       console.error("FETCH MASTERLIST ERROR:", err);
       if (err.message?.includes('401') && onUnauthorized) {
         onUnauthorized();
       }
-      if (isInitial) setError("Failed to load masterlist data. Please try again later.");
+      setError("Failed to load masterlist data. Please try again later.");
     } finally {
-      if (isInitial) setIsLoading(false);
+      setIsLoading(false);
     }
   }, [onUnauthorized]);
 
   useEffect(() => {
     fetchMasterlist();
-    
-    // Auto refresh every 10 seconds for real-time feel
-    const interval = setInterval(() => {
-      fetchMasterlist();
-    }, 10000);
-    
-    return () => clearInterval(interval);
   }, [fetchMasterlist, refreshTrigger]);
 
   useEffect(() => {
